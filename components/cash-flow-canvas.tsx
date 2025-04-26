@@ -49,7 +49,20 @@ const nodeTypes: NodeTypes = {
   assetNode: AssetNode,
 }
 
-// Initial nodes and edges
+// Icon options for nodes
+const iconOptions = [
+  { value: "dollar", label: "Dollar", icon: <DollarSignIcon className="h-4 w-4" /> },
+  { value: "wallet", label: "Wallet", icon: <WalletIcon className="h-4 w-4" /> },
+  { value: "bank", label: "Bank", icon: <BuildingIcon className="h-4 w-4" /> },
+  { value: "piggy", label: "Piggy Bank", icon: <PiggyBankIcon className="h-4 w-4" /> },
+  { value: "card", label: "Credit Card", icon: <CreditCardIcon className="h-4 w-4" /> },
+  { value: "cart", label: "Shopping", icon: <ShoppingCartIcon className="h-4 w-4" /> },
+  { value: "home", label: "Home", icon: <HomeIcon className="h-4 w-4" /> },
+  { value: "coins", label: "Coins", icon: <CoinsIcon className="h-4 w-4" /> },
+  { value: "circle", label: "Circle Dollar", icon: <CircleDollarSignIcon className="h-4 w-4" /> },
+]
+
+// Initial nodes and edges with iconName instead of icon component
 const initialNodes = [
   {
     id: "1",
@@ -58,7 +71,7 @@ const initialNodes = [
     data: {
       label: "Monthly Income",
       amount: 5000,
-      icon: <DollarSignIcon className="h-5 w-5" />,
+      iconName: "dollar",
       color: "bg-green-100 border-green-500",
     },
   },
@@ -69,7 +82,7 @@ const initialNodes = [
     data: {
       label: "Monthly Budget",
       amount: 4000,
-      icon: <WalletIcon className="h-5 w-5" />,
+      iconName: "wallet",
       color: "bg-blue-100 border-blue-500",
     },
   },
@@ -80,7 +93,7 @@ const initialNodes = [
     data: {
       label: "Rent",
       amount: 1500,
-      icon: <HomeIcon className="h-5 w-5" />,
+      iconName: "home",
       color: "bg-red-100 border-red-500",
     },
   },
@@ -91,7 +104,7 @@ const initialNodes = [
     data: {
       label: "Groceries",
       amount: 500,
-      icon: <ShoppingCartIcon className="h-5 w-5" />,
+      iconName: "cart",
       color: "bg-red-100 border-red-500",
     },
   },
@@ -102,7 +115,7 @@ const initialNodes = [
     data: {
       label: "Savings",
       amount: 1000,
-      icon: <PiggyBankIcon className="h-5 w-5" />,
+      iconName: "piggy",
       color: "bg-purple-100 border-purple-500",
     },
   },
@@ -166,7 +179,7 @@ const nodeTemplates = {
     data: {
       label: "Income",
       amount: 1000,
-      icon: <DollarSignIcon className="h-5 w-5" />,
+      iconName: "dollar",
       color: "bg-green-100 border-green-500",
     },
   },
@@ -175,7 +188,7 @@ const nodeTemplates = {
     data: {
       label: "Expense",
       amount: 500,
-      icon: <CreditCardIcon className="h-5 w-5" />,
+      iconName: "card",
       color: "bg-red-100 border-red-500",
     },
   },
@@ -184,7 +197,7 @@ const nodeTemplates = {
     data: {
       label: "Budget",
       amount: 2000,
-      icon: <WalletIcon className="h-5 w-5" />,
+      iconName: "wallet",
       color: "bg-blue-100 border-blue-500",
     },
   },
@@ -193,7 +206,7 @@ const nodeTemplates = {
     data: {
       label: "Funding",
       amount: 5000,
-      icon: <BanknoteIcon className="h-5 w-5" />,
+      iconName: "bank",
       color: "bg-purple-100 border-purple-500",
     },
   },
@@ -202,24 +215,11 @@ const nodeTemplates = {
     data: {
       label: "Asset",
       amount: 10000,
-      icon: <HomeIcon className="h-5 w-5" />,
+      iconName: "home",
       color: "bg-amber-100 border-amber-500",
     },
   },
 }
-
-// Icon options for nodes
-const iconOptions = [
-  { value: "dollar", label: "Dollar", icon: <DollarSignIcon className="h-4 w-4" /> },
-  { value: "wallet", label: "Wallet", icon: <WalletIcon className="h-4 w-4" /> },
-  { value: "bank", label: "Bank", icon: <BuildingIcon className="h-4 w-4" /> },
-  { value: "piggy", label: "Piggy Bank", icon: <PiggyBankIcon className="h-4 w-4" /> },
-  { value: "card", label: "Credit Card", icon: <CreditCardIcon className="h-4 w-4" /> },
-  { value: "cart", label: "Shopping", icon: <ShoppingCartIcon className="h-4 w-4" /> },
-  { value: "home", label: "Home", icon: <HomeIcon className="h-4 w-4" /> },
-  { value: "coins", label: "Coins", icon: <CoinsIcon className="h-4 w-4" /> },
-  { value: "circle", label: "Circle Dollar", icon: <CircleDollarSignIcon className="h-4 w-4" /> },
-]
 
 export default function CashFlowCanvas() {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
@@ -228,6 +228,23 @@ export default function CashFlowCanvas() {
   const [selectedEdge, setSelectedEdge] = useState(null)
   const reactFlowWrapper = useRef(null)
   const [reactFlowInstance, setReactFlowInstance] = useState(null)
+
+  // Get icon component by name
+  const getIconByName = (name) => {
+    const iconOption = iconOptions.find((option) => option.value === name)
+    return iconOption ? iconOption.icon : <DollarSignIcon className="h-5 w-5" />
+  }
+
+  // Process nodes to add icon components based on iconName
+  const processNodes = (nodes) => {
+    return nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        icon: getIconByName(node.data.iconName)
+      }
+    }))
+  }
 
   // Handle connecting nodes
   const onConnect = useCallback(
@@ -272,6 +289,8 @@ export default function CashFlowCanvas() {
       position: { x: 100, y: 100 },
       ...nodeTemplates[type],
     }
+    // Add icon component based on iconName
+    newNode.data.icon = getIconByName(newNode.data.iconName)
     setNodes((nds) => nds.concat(newNode))
   }
 
@@ -280,12 +299,17 @@ export default function CashFlowCanvas() {
     setNodes((nds) =>
       nds.map((node) => {
         if (node.id === id) {
+          const updatedData = {
+            ...node.data,
+            ...newData,
+          }
+          // If iconName is updated, update the icon component too
+          if (newData.iconName) {
+            updatedData.icon = getIconByName(newData.iconName)
+          }
           return {
             ...node,
-            data: {
-              ...node.data,
-              ...newData,
-            },
+            data: updatedData,
           }
         }
         return node
@@ -321,11 +345,10 @@ export default function CashFlowCanvas() {
     }
   }
 
-  // Get icon component by name
-  const getIconByName = (name) => {
-    const iconOption = iconOptions.find((option) => option.value === name)
-    return iconOption ? iconOption.icon : <DollarSignIcon className="h-5 w-5" />
-  }
+  // Initialize nodes with icons on component mount
+  useState(() => {
+    setNodes(processNodes(initialNodes))
+  }, [])
 
   return (
     <div className="h-[calc(100vh-57px)]" ref={reactFlowWrapper}>
@@ -376,13 +399,36 @@ export default function CashFlowCanvas() {
             <JsonExport
               onExport={() => {
                 if (!reactFlowInstance) return {}
-                return reactFlowInstance.toObject()
+                
+                // Remove icon components before serialization
+                const flowObject = reactFlowInstance.toObject()
+                const serializedNodes = flowObject.nodes.map(node => ({
+                  ...node,
+                  data: {
+                    ...node.data,
+                    icon: undefined // Remove non-serializable icon component
+                  }
+                }))
+                
+                return {
+                  ...flowObject,
+                  nodes: serializedNodes
+                }
               }}
             />
             <JsonImport
               onImport={(flowData) => {
                 if (flowData.nodes && flowData.edges) {
-                  setNodes(flowData.nodes || [])
+                  // Add icon components based on iconName when importing
+                  const nodesWithIcons = flowData.nodes.map(node => ({
+                    ...node,
+                    data: {
+                      ...node.data,
+                      icon: getIconByName(node.data.iconName)
+                    }
+                  }))
+                  
+                  setNodes(nodesWithIcons)
                   setEdges(flowData.edges || [])
                 }
               }}
