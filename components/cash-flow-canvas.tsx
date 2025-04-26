@@ -1,10 +1,9 @@
 "use client"
 
-import { useCallback, useRef, useState } from "react"
+import { useCallback, useRef, useState, useEffect } from "react"
 import ReactFlow, {
   Background,
   Controls,
-  MiniMap,
   addEdge,
   useEdgesState,
   useNodesState,
@@ -12,6 +11,7 @@ import ReactFlow, {
   Panel,
   type Connection,
   type NodeTypes,
+  SelectionMode,
 } from "reactflow"
 import "reactflow/dist/style.css"
 
@@ -21,14 +21,17 @@ import {
   BuildingIcon,
   CircleDollarSignIcon,
   CoinsIcon,
+  CopyIcon,
   CreditCardIcon,
   DollarSignIcon,
   HomeIcon,
   PiggyBankIcon,
-  PlusIcon,
   ShoppingCartIcon,
+  PlusIcon,
+  ScissorsIcon,
   TrashIcon,
   WalletIcon,
+  MessageSquareIcon,
 } from "lucide-react"
 
 import FundingNode from "@/components/nodes/funding-node"
@@ -36,6 +39,7 @@ import ExpenseNode from "@/components/nodes/expense-node"
 import BudgetNode from "@/components/nodes/budget-node"
 import IncomeNode from "@/components/nodes/income-node"
 import AssetNode from "@/components/nodes/asset-node"
+import CommentNode from "@/components/nodes/comment-node"
 import EditNodeForm from "@/components/edit-node-form"
 import EditEdgeForm from "@/components/edit-edge-form"
 import { JsonExport, JsonImport } from "@/components/json-import-export"
@@ -47,6 +51,7 @@ const nodeTypes: NodeTypes = {
   budgetNode: BudgetNode,
   incomeNode: IncomeNode,
   assetNode: AssetNode,
+  commentNode: CommentNode,
 }
 
 // Icon options for nodes
@@ -60,6 +65,7 @@ const iconOptions = [
   { value: "home", label: "Home", icon: <HomeIcon className="h-4 w-4" /> },
   { value: "coins", label: "Coins", icon: <CoinsIcon className="h-4 w-4" /> },
   { value: "circle", label: "Circle Dollar", icon: <CircleDollarSignIcon className="h-4 w-4" /> },
+  { value: "message", label: "Comment", icon: <MessageSquareIcon className="h-4 w-4" /> },
 ]
 
 // Initial nodes and edges with iconName instead of icon component
@@ -219,6 +225,15 @@ const nodeTemplates = {
       color: "bg-amber-100 border-amber-500",
     },
   },
+  comment: {
+    type: "commentNode",
+    data: {
+      label: "Comment",
+      comment: "Add your notes here",
+      iconName: "message",
+      color: "bg-yellow-100 border-yellow-500",
+    },
+  },
 }
 
 export default function CashFlowCanvas() {
@@ -226,8 +241,12 @@ export default function CashFlowCanvas() {
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [selectedNode, setSelectedNode] = useState(null)
   const [selectedEdge, setSelectedEdge] = useState(null)
+  const [selectedElements, setSelectedElements] = useState({ nodes: [], edges: [] })
+  const [clipboard, setClipboard] = useState({ nodes: [], edges: [] })
   const reactFlowWrapper = useRef(null)
   const [reactFlowInstance, setReactFlowInstance] = useState(null)
+  const [isEditingNode, setIsEditingNode] = useState(false)
+  const [isEditingEdge, setIsEditingEdge] = useState(false)
 
   // Get icon component by name
   const getIconByName = (name) => {
@@ -266,20 +285,50 @@ export default function CashFlowCanvas() {
 
   // Handle node selection
   const onNodeClick = useCallback((event, node) => {
-    setSelectedNode(node)
-    setSelectedEdge(null)
+    if (!event.ctrlKey && !event.metaKey) {
+      setSelectedNode(node)
+      setSelectedEdge(null)
+      setIsEditingNode(true)
+    }
   }, [])
 
   // Handle edge selection
   const onEdgeClick = useCallback((event, edge) => {
-    setSelectedEdge(edge)
-    setSelectedNode(null)
+    if (!event.ctrlKey && !event.metaKey) {
+      setSelectedEdge(edge)
+      setSelectedNode(null)
+      setIsEditingEdge(true)
+    }
   }, [])
+
+  // Handle selection change by monitoring nodes and edges directly
+  useEffect(() => {
+    const selectedNodes = nodes.filter(node => node.selected);
+    const selectedEdges = edges.filter(edge => edge.selected);
+    
+    setSelectedElements({ nodes: selectedNodes, edges: selectedEdges });
+    
+    // Handle single node/edge selection for edit panel
+    if (selectedNodes.length === 1 && selectedEdges.length === 0) {
+      setSelectedNode(selectedNodes[0]);
+      setSelectedEdge(null);
+    } else if (selectedNodes.length === 0 && selectedEdges.length === 1) {
+      setSelectedNode(null);
+      setSelectedEdge(selectedEdges[0]);
+    } else if (selectedNodes.length > 1 || selectedEdges.length > 1) {
+      setSelectedNode(null);
+      setSelectedEdge(null);
+      setIsEditingNode(false);
+      setIsEditingEdge(false);
+    }
+  }, [nodes, edges]);
 
   // Handle pane click (deselect)
   const onPaneClick = useCallback(() => {
     setSelectedNode(null)
     setSelectedEdge(null)
+    setIsEditingNode(false)
+    setIsEditingEdge(false)
   }, [])
 
   // Add a new node
@@ -334,21 +383,160 @@ export default function CashFlowCanvas() {
 
   // Delete selected node or edge
   const deleteSelected = () => {
-    if (selectedNode) {
+    if (selectedElements.nodes.length > 0 || selectedElements.edges.length > 0) {
+      const selectedNodeIds = selectedElements.nodes.map(node => node.id)
+      
+      setNodes((nds) => nds.filter((node) => !selectedNodeIds.includes(node.id)))
+      setEdges((eds) => eds.filter((edge) => {
+        // Remove edges connected to deleted nodes
+        if (selectedNodeIds.includes(edge.source) || selectedNodeIds.includes(edge.target)) {
+          return false
+        }
+        
+        // Remove selected edges
+        return !selectedElements.edges.some(selectedEdge => selectedEdge.id === edge.id)
+      }))
+      
+      setSelectedNode(null)
+      setSelectedEdge(null)
+      setIsEditingNode(false)
+      setIsEditingEdge(false)
+    } else if (selectedNode) {
       setNodes((nds) => nds.filter((node) => node.id !== selectedNode.id))
       setEdges((eds) => eds.filter((edge) => edge.source !== selectedNode.id && edge.target !== selectedNode.id))
       setSelectedNode(null)
-    }
-    if (selectedEdge) {
+      setIsEditingNode(false)
+    } else if (selectedEdge) {
       setEdges((eds) => eds.filter((edge) => edge.id !== selectedEdge.id))
       setSelectedEdge(null)
+      setIsEditingEdge(false)
     }
   }
+
+  // Cut selected nodes and edges
+  const cutSelected = () => {
+    if (selectedElements.nodes.length > 0 || selectedElements.edges.length > 0) {
+      // Copy selected elements to clipboard
+      setClipboard({
+        nodes: selectedElements.nodes.map(node => ({...node})),
+        edges: selectedElements.edges.filter(edge => {
+          // Only include edges where both source and target nodes are selected
+          const sourceSelected = selectedElements.nodes.some(node => node.id === edge.source)
+          const targetSelected = selectedElements.nodes.some(node => node.id === edge.target)
+          return sourceSelected && targetSelected
+        })
+      })
+      
+      // Delete selected elements
+      deleteSelected()
+    }
+  }
+
+  // Paste nodes and edges from clipboard
+  const pasteFromClipboard = () => {
+    if (clipboard.nodes.length === 0) return
+    
+    if (!reactFlowInstance) return
+    
+    // Get current viewport position
+    const { x, y, zoom } = reactFlowInstance.getViewport()
+    
+    // Generate new IDs for nodes and create mapping
+    const idMapping = {}
+    const currentTimestamp = Date.now()
+    
+    // Create new nodes with offset positions
+    const newNodes = clipboard.nodes.map((node, index) => {
+      const newId = `${node.id}_copy_${currentTimestamp}_${index}`
+      idMapping[node.id] = newId
+      
+      // Calculate paste position: we'll offset by 100px from original position
+      return {
+        ...node,
+        id: newId,
+        position: {
+          x: node.position.x + 100,
+          y: node.position.y + 100
+        },
+        selected: true,
+        data: {
+          ...node.data,
+          icon: getIconByName(node.data.iconName) // Ensure icon is set
+        }
+      }
+    })
+    
+    // Create new edges with updated source/target IDs
+    const newEdges = clipboard.edges.map((edge, index) => {
+      return {
+        ...edge,
+        id: `${edge.id}_copy_${currentTimestamp}_${index}`,
+        source: idMapping[edge.source],
+        target: idMapping[edge.target],
+        selected: true
+      }
+    })
+    
+    // Add new nodes and edges to the canvas
+    setNodes(existingNodes => [...existingNodes, ...newNodes])
+    setEdges(existingEdges => [...existingEdges, ...newEdges])
+  }
+
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      // Skip keyboard shortcuts if we're editing a node or edge
+      if (isEditingNode || isEditingEdge) {
+        return;
+      }
+      
+      // Ctrl+X or Cmd+X: Cut
+      if ((event.ctrlKey || event.metaKey) && event.key === 'x') {
+        cutSelected()
+      }
+      
+      // Ctrl+V or Cmd+V: Paste
+      if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+        event.preventDefault()
+        pasteFromClipboard()
+      }
+      
+      // Ctrl+C or Cmd+C: Copy
+      if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+        if (selectedElements.nodes.length > 0 || selectedElements.edges.length > 0) {
+          setClipboard({
+            nodes: selectedElements.nodes.map(node => ({...node})),
+            edges: selectedElements.edges.filter(edge => {
+              // Only include edges where both source and target nodes are selected
+              const sourceSelected = selectedElements.nodes.some(node => node.id === edge.source)
+              const targetSelected = selectedElements.nodes.some(node => node.id === edge.target)
+              return sourceSelected && targetSelected
+            })
+          })
+        }
+      }
+      
+      // Delete or Backspace: Delete selected
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        deleteSelected()
+      }
+    }
+    
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [selectedElements, selectedNode, selectedEdge, isEditingNode, isEditingEdge])
 
   // Initialize nodes with icons on component mount
   useState(() => {
     setNodes(processNodes(initialNodes))
   }, [])
+
+  // Function to handle selection change directly from ReactFlow
+  const onSelectionChange = useCallback(({ nodes, edges }) => {
+    setSelectedElements({ nodes, edges });
+  }, []);
 
   return (
     <div className="h-[calc(100vh-57px)]" ref={reactFlowWrapper}>
@@ -361,16 +549,20 @@ export default function CashFlowCanvas() {
         onNodeClick={onNodeClick}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
+        onSelectionChange={onSelectionChange}
         nodeTypes={nodeTypes}
         onInit={setReactFlowInstance}
         fitView
+        selectionMode={SelectionMode.Partial}
+        selectionOnDrag
+        multiSelectionKeyCode={['Control', 'Meta']}
+        deleteKeyCode={['Backspace', 'Delete']}
       >
         <Background />
         <Controls />
-        <MiniMap />
 
         <Panel position="top-right" className="bg-background border rounded-md shadow-sm p-2">
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button size="sm" onClick={() => addNode("income")} className="bg-green-500 hover:bg-green-600">
               <PlusIcon className="h-4 w-4 mr-1" /> Income
             </Button>
@@ -386,9 +578,24 @@ export default function CashFlowCanvas() {
             <Button size="sm" onClick={() => addNode("asset")} className="bg-amber-500 hover:bg-amber-600">
               <PlusIcon className="h-4 w-4 mr-1" /> Asset
             </Button>
-            {(selectedNode || selectedEdge) && (
-              <Button size="sm" variant="destructive" onClick={deleteSelected}>
-                <TrashIcon className="h-4 w-4 mr-1" /> Delete
+            <Button size="sm" onClick={() => addNode("comment")} className="bg-yellow-500 hover:bg-yellow-600">
+              <PlusIcon className="h-4 w-4 mr-1" /> Comment
+            </Button>
+            
+            {selectedElements.nodes.length > 0 || selectedElements.edges.length > 0 || selectedNode || selectedEdge ? (
+              <>
+                <Button size="sm" variant="destructive" onClick={deleteSelected}>
+                  <TrashIcon className="h-4 w-4 mr-1" /> Delete
+                </Button>
+                <Button size="sm" variant="secondary" onClick={cutSelected}>
+                  <ScissorsIcon className="h-4 w-4 mr-1" /> Cut
+                </Button>
+              </>
+            ) : null}
+            
+            {clipboard.nodes.length > 0 && (
+              <Button size="sm" variant="secondary" onClick={pasteFromClipboard}>
+                <CopyIcon className="h-4 w-4 mr-1" /> Paste
               </Button>
             )}
           </div>
@@ -443,7 +650,10 @@ export default function CashFlowCanvas() {
               onUpdate={(id, data) => {
                 updateNodeData(id, data)
               }}
-              onCancel={() => setSelectedNode(null)}
+              onCancel={() => {
+                setSelectedNode(null)
+                setIsEditingNode(false)
+              }}
             />
           </Panel>
         )}
@@ -455,7 +665,10 @@ export default function CashFlowCanvas() {
               onUpdate={(id, data) => {
                 updateEdgeData(id, data)
               }}
-              onCancel={() => setSelectedEdge(null)}
+              onCancel={() => {
+                setSelectedEdge(null)
+                setIsEditingEdge(false)
+              }}
             />
           </Panel>
         )}
